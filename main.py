@@ -10,6 +10,7 @@ import logging
 
 import cv2
 import vlogging
+import moviepy.editor
 
 
 def get_logger(path):
@@ -159,31 +160,39 @@ def get_simple_contours_image(binary_image):
 
 def get_lane_line(lines, slope_condition):
 
-    xs = []
-    ys = []
+    try:
 
-    for line in lines:
+        xs = []
+        ys = []
 
-        x1, y1, x2, y2 = line[0]
-        slope = (y2 - y1) / (x2 - x1)
+        for line in lines:
 
-        if slope_condition(slope):
+            x1, y1, x2, y2 = line[0]
+            slope = (y2 - y1) / (x2 - x1)
 
-            xs.extend([x1, x2])
-            ys.extend([y1, y2])
+            if slope_condition(slope):
 
-    lane_equation = np.polyfit(xs, ys, deg=1)
+                xs.extend([x1, x2])
+                ys.extend([y1, y2])
 
-    min_x = min(xs)
-    max_x = max(xs)
+        lane_equation = np.polyfit(xs, ys, deg=1)
 
-    # Compute line that fits our equation and spans our xs
-    lane = np.array([
-        min_x, (min_x * lane_equation[0]) + lane_equation[1],
-        max_x, (max_x * lane_equation[0]) + lane_equation[1]
-    ]).astype(int)
+        min_x = min(xs)
+        max_x = max(xs)
 
-    return np.array([lane])
+        # Compute line that fits our equation and spans our xs
+        lane = np.array([
+            min_x, (min_x * lane_equation[0]) + lane_equation[1],
+            max_x, (max_x * lane_equation[0]) + lane_equation[1]
+        ]).astype(int)
+
+        return np.array([lane])
+
+    except TypeError:
+
+        # If no lines were detected, np.polyfit will get empty data
+        # For simplicity just return a 0 line then
+        return np.array([[0, 0, 0, 0]])
 
 
 def get_lanes_lines(lines):
@@ -203,6 +212,7 @@ def get_lanes_lines(lines):
 
 
 def process_image(image):
+
     grayscale_image = grayscale(image)
     blurred_image = gaussian_blur(grayscale_image, 3)
     contours_image = get_image_contours(blurred_image)
@@ -222,10 +232,11 @@ def process_image(image):
 
     lane_lanes = get_lanes_lines(lines)
 
-    lines_image = np.zeros_like(image)
-    draw_lines(lines_image, lane_lanes)
+    lanes_image = np.zeros_like(image)
+    draw_lines(lanes_image, lane_lanes, thickness=8, color=[0, 0, 255])
 
-    return lines_image
+    lanes_overlay_image = weighted_img(lanes_image, image, alpha=1)
+    return lanes_overlay_image
 
 
 def process_image_experimental(image):
@@ -249,10 +260,12 @@ def process_image_experimental(image):
 
     lane_lanes = get_lanes_lines(lines)
 
-    lines_image = np.zeros_like(image)
-    draw_lines(lines_image, lane_lanes)
+    lanes_image = np.zeros_like(image)
+    draw_lines(lanes_image, lane_lanes, thickness=4, color=[255, 0, 0])
 
-    return lines_image
+    lanes_overlay_image = weighted_img(lanes_image, image, alpha=1)
+
+    return lanes_overlay_image
 
 
 def detect_images_lines(directory, logger):
@@ -263,20 +276,32 @@ def detect_images_lines(directory, logger):
 
         image = cv2.imread(path)
         lanes_image = process_image(image)
-        lanes_image_experimental = process_image_experimental(image)
+        # lanes_image_experimental = process_image_experimental(image)
 
-        # images = [image, lanes_image]
-        images = [image, lanes_image, lanes_image_experimental]
+        images = [image, lanes_image]
+        # images = [image, lanes_image, lanes_image_experimental]
         logger.info(vlogging.VisualRecord("Detections", images))
+
+
+def detect_movies_lines():
+
+    paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4", "challenge.mp4"]
+
+    for path in paths:
+
+        output_name = path.split(".")[0] + "_output.mp4"
+        clip = moviepy.editor.VideoFileClip(path)
+        white_clip = clip.fl_image(process_image)
+        white_clip.write_videofile(output_name, audio=False)
 
 
 def main():
 
-    logger = get_logger("/tmp/lanes_detection.html")
+    # logger = get_logger("/tmp/lanes_detection.html")
+    # images_directory = "./test_images"
+    # detect_images_lines(images_directory, logger)
 
-    images_directory = "./test_images"
-
-    detect_images_lines(images_directory, logger)
+    detect_movies_lines()
 
 
 if __name__ == "__main__":
