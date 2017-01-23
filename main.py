@@ -12,6 +12,24 @@ import cv2
 import vlogging
 
 
+def get_logger(path):
+    """
+    Returns a logger that writes to an html page
+    :param path: path to log.html page
+    :return: logger instance
+    """
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    logger = logging.getLogger("faces")
+    file_handler = logging.FileHandler(path, mode="w")
+
+    logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
+
+    return logger
+
+
 def grayscale(img):
     """Applies the Grayscale transform
     This will return an image with only one color channel
@@ -112,16 +130,31 @@ def weighted_img(img, initial_img, alpha=0.8, beta=1., lambda_parameter=0.):
     return cv2.addWeighted(initial_img, alpha, img, beta, lambda_parameter)
 
 
-def detect_images_lines(directory):
+def detect_images_lines(directory, logger):
 
     paths = glob.glob(os.path.join(directory, "*.jpg"))
-    print(*paths, sep="\n")
+
+    for path in paths:
+
+        image = cv2.imread(path)
+        lanes_image = process_image(image)
+
+        images = [cv2.pyrDown(image) for image in [image, lanes_image]]
+        logger.info(vlogging.VisualRecord("Detections", images))
+
+
+def process_image(image):
+
+    return image
 
 
 def main():
 
+    logger = get_logger("/tmp/lanes_detection.html")
+
     images_directory = "./test_images"
-    detect_images_lines(images_directory)
+
+    detect_images_lines(images_directory, logger)
 
 
 if __name__ == "__main__":
