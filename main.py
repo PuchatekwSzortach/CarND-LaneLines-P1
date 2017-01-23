@@ -153,7 +153,13 @@ def process_image(image):
     blurred_image = gaussian_blur(grayscale_image, 3)
     contours_image = get_image_contours(blurred_image)
 
-    return contours_image
+    mask_vertices = np.array([[
+        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
+    ]])
+
+    masked_image = region_of_interest(contours_image, mask_vertices)
+
+    return masked_image
 
 
 def main():
