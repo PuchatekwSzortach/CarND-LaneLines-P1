@@ -94,7 +94,9 @@ def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
     If you want to make the lines semi-transparent, think about combining
     this function with the weighted_img() function below
     """
+
     for line in lines:
+
         for x1, y1, x2, y2 in line:
             cv2.line(img, (x1, y1), (x2, y2), color, thickness)
 
@@ -155,8 +157,52 @@ def get_simple_contours_image(binary_image):
     return simple_image
 
 
-def process_image(image):
+def get_lane_line(lines, slope_condition):
 
+    xs = []
+    ys = []
+
+    for line in lines:
+
+        x1, y1, x2, y2 = line[0]
+        slope = (y2 - y1) / (x2 - x1)
+
+        if slope_condition(slope):
+
+            xs.extend([x1, x2])
+            ys.extend([y1, y2])
+
+    lane_equation = np.polyfit(xs, ys, deg=1)
+
+    min_x = min(xs)
+    max_x = max(xs)
+
+    # Compute line that fits our equation and spans our xs
+    lane = np.array([
+        min_x, (min_x * lane_equation[0]) + lane_equation[1],
+        max_x, (max_x * lane_equation[0]) + lane_equation[1]
+    ]).astype(int)
+
+    return np.array([lane])
+
+
+def get_lanes_lines(lines):
+    """
+    Given an array of lines, compute likely lanes lines and return them
+    :param lines:
+    :return: lines
+    """
+
+    left_line_slope_condition = lambda x: x < 0
+    left_line = get_lane_line(lines, left_line_slope_condition)
+
+    right_line_slope_condition = lambda x: x > 0
+    right_line = get_lane_line(lines, right_line_slope_condition)
+
+    return [left_line, right_line]
+
+
+def process_image(image):
     grayscale_image = grayscale(image)
     blurred_image = gaussian_blur(grayscale_image, 3)
     contours_image = get_image_contours(blurred_image)
@@ -170,16 +216,14 @@ def process_image(image):
     # Lines can't be complex geometrical shapes, so we can remove any contour that isn't sufficiently simple
     simple_contours_image = get_simple_contours_image(masked_image)
 
-    # lines_image = hough_lines(
-    #     simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, min_line_len=10, max_line_gap=1)
-
     lines = cv2.HoughLinesP(
         simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
         minLineLength=10, maxLineGap=1)
 
-    lines_image = np.zeros_like(image)
-    draw_lines(lines_image, lines)
+    lane_lanes = get_lanes_lines(lines)
 
+    lines_image = np.zeros_like(image)
+    draw_lines(lines_image, lane_lanes)
 
     return lines_image
 
@@ -203,8 +247,10 @@ def process_image_experimental(image):
         simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
         minLineLength=10, maxLineGap=1)
 
+    lane_lanes = get_lanes_lines(lines)
+
     lines_image = np.zeros_like(image)
-    draw_lines(lines_image, lines)
+    draw_lines(lines_image, lane_lanes)
 
     return lines_image
 
@@ -217,10 +263,10 @@ def detect_images_lines(directory, logger):
 
         image = cv2.imread(path)
         lanes_image = process_image(image)
-        # lanes_image_experimental = process_image_experimental(image)
+        lanes_image_experimental = process_image_experimental(image)
 
-        images = [image, lanes_image]
-        # images = [image, lanes_image, lanes_image_experimental]
+        # images = [image, lanes_image]
+        images = [image, lanes_image, lanes_image_experimental]
         logger.info(vlogging.VisualRecord("Detections", images))
 
 
