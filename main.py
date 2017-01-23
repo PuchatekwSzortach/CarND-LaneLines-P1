@@ -115,7 +115,6 @@ def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
     return line_img
 
 
-# Python 3 has support for cool math symbols.
 def weighted_img(img, initial_img, alpha=0.8, beta=1., lambda_parameter=0.):
     """
     `img` is the output of the hough_lines(), An image with lines drawn on it.
@@ -139,11 +138,36 @@ def detect_images_lines(directory, logger):
 
         image = cv2.imread(path)
         lanes_image = process_image(image)
+        # lanes_image_experimental = process_image_experimental(image)
 
         # images = [cv2.pyrDown(image) for image in [image, lanes_image]]
         images = [image, lanes_image]
         logger.info(vlogging.VisualRecord("Detections", images))
 
+
+def get_simple_contours_image(binary_image):
+    """
+    Given a binary image return image with only simple contours
+    :param binary_image:
+    :return: image
+    """
+
+    _, contours, _ = cv2.findContours(binary_image, mode=cv2.RETR_LIST, method=cv2.CHAIN_APPROX_SIMPLE)
+
+    simple_contours = []
+
+    for contour in contours:
+
+        simple_contour = cv2.approxPolyDP(contour, epsilon=5, closed=False)
+
+        if len(simple_contour) <= 10:
+
+            simple_contours.append(simple_contour)
+
+    simple_image = np.zeros_like(binary_image)
+    cv2.drawContours(simple_image, np.array(simple_contours), contourIdx=-1, color=255)
+
+    return simple_image
 
 
 
@@ -159,7 +183,34 @@ def process_image(image):
 
     masked_image = region_of_interest(contours_image, mask_vertices)
 
-    return masked_image
+    # Lines can't be complex geometrical shapes, so we can remove any contour that isn't sufficiently simple
+    simple_contours_image = get_simple_contours_image(masked_image)
+
+    lines_image = hough_lines(
+        simple_contours_image, rho=1, theta=math.pi/180, threshold=20, min_line_len=10, max_line_gap=1)
+
+    return lines_image
+
+
+def process_image_experimental(image):
+
+    grayscale_image = grayscale(image)
+    blurred_image = gaussian_blur(grayscale_image, 3)
+    contours_image = get_image_contours(blurred_image)
+
+    mask_vertices = np.array([[
+        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
+    ]])
+
+    masked_image = region_of_interest(contours_image, mask_vertices)
+
+    # Lines can't be complex geometrical shapes, so we can remove any contour that isn't sufficiently simple
+    simple_contours_image = get_simple_contours_image(masked_image)
+
+
+    # lines_image = hough_lines(masked_image, rho=1, theta=math.pi/180, threshold=40, min_line_len=10, max_line_gap=5)
+
+    return simple_contours_image
 
 
 def main():
