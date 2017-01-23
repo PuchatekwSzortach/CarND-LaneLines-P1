@@ -130,21 +130,6 @@ def weighted_img(img, initial_img, alpha=0.8, beta=1., lambda_parameter=0.):
     return cv2.addWeighted(initial_img, alpha, img, beta, lambda_parameter)
 
 
-def detect_images_lines(directory, logger):
-
-    paths = glob.glob(os.path.join(directory, "*.jpg"))
-
-    for path in paths:
-
-        image = cv2.imread(path)
-        lanes_image = process_image(image)
-        # lanes_image_experimental = process_image_experimental(image)
-
-        # images = [cv2.pyrDown(image) for image in [image, lanes_image]]
-        images = [image, lanes_image]
-        logger.info(vlogging.VisualRecord("Detections", images))
-
-
 def get_simple_contours_image(binary_image):
     """
     Given a binary image return image with only simple contours
@@ -170,7 +155,6 @@ def get_simple_contours_image(binary_image):
     return simple_image
 
 
-
 def process_image(image):
 
     grayscale_image = grayscale(image)
@@ -186,8 +170,16 @@ def process_image(image):
     # Lines can't be complex geometrical shapes, so we can remove any contour that isn't sufficiently simple
     simple_contours_image = get_simple_contours_image(masked_image)
 
-    lines_image = hough_lines(
-        simple_contours_image, rho=1, theta=math.pi/180, threshold=20, min_line_len=10, max_line_gap=1)
+    # lines_image = hough_lines(
+    #     simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, min_line_len=10, max_line_gap=1)
+
+    lines = cv2.HoughLinesP(
+        simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
+        minLineLength=10, maxLineGap=1)
+
+    lines_image = np.zeros_like(image)
+    draw_lines(lines_image, lines)
+
 
     return lines_image
 
@@ -207,10 +199,29 @@ def process_image_experimental(image):
     # Lines can't be complex geometrical shapes, so we can remove any contour that isn't sufficiently simple
     simple_contours_image = get_simple_contours_image(masked_image)
 
+    lines = cv2.HoughLinesP(
+        simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
+        minLineLength=10, maxLineGap=1)
 
-    # lines_image = hough_lines(masked_image, rho=1, theta=math.pi/180, threshold=40, min_line_len=10, max_line_gap=5)
+    lines_image = np.zeros_like(image)
+    draw_lines(lines_image, lines)
 
-    return simple_contours_image
+    return lines_image
+
+
+def detect_images_lines(directory, logger):
+
+    paths = glob.glob(os.path.join(directory, "*.jpg"))
+
+    for path in paths:
+
+        image = cv2.imread(path)
+        lanes_image = process_image(image)
+        # lanes_image_experimental = process_image_experimental(image)
+
+        images = [image, lanes_image]
+        # images = [image, lanes_image, lanes_image_experimental]
+        logger.info(vlogging.VisualRecord("Detections", images))
 
 
 def main():
