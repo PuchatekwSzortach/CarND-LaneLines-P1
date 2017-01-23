@@ -11,6 +11,7 @@ import logging
 import cv2
 import vlogging
 import moviepy.editor
+import matplotlib.image as mpimg
 
 
 def get_logger(path):
@@ -140,17 +141,17 @@ def get_simple_contours_image(binary_image):
     :return: image
     """
 
-    _, contours, _ = cv2.findContours(binary_image, mode=cv2.RETR_LIST, method=cv2.CHAIN_APPROX_SIMPLE)
+    _, contours, _ = cv2.findContours(binary_image.copy(), mode=cv2.RETR_LIST, method=cv2.CHAIN_APPROX_SIMPLE)
 
     simple_contours = []
 
     for contour in contours:
 
-        simple_contour = cv2.approxPolyDP(contour, epsilon=5, closed=False)
+        simple_contour = cv2.approxPolyDP(contour, epsilon=10, closed=True)
 
-        if len(simple_contour) <= 10:
+        if len(simple_contour) <= 8:
 
-            simple_contours.append(simple_contour)
+            simple_contours.append(contour)
 
     simple_image = np.zeros_like(binary_image)
     cv2.drawContours(simple_image, np.array(simple_contours), contourIdx=-1, color=255)
@@ -158,7 +159,7 @@ def get_simple_contours_image(binary_image):
     return simple_image
 
 
-def get_lane_line(lines, slope_condition):
+def get_lane_line(lines, slope_condition, image_shape):
 
     try:
 
@@ -177,13 +178,20 @@ def get_lane_line(lines, slope_condition):
 
         lane_equation = np.polyfit(xs, ys, deg=1)
 
-        min_x = min(xs)
-        max_x = max(xs)
+        min_y = min(ys)
+        min_x = round((min_y - lane_equation[1]) / lane_equation[0])
+
+        max_y = image_shape[0]
+        max_x = round((max_y - lane_equation[1]) / lane_equation[0])
 
         # Compute line that fits our equation and spans our xs
+        # lane = np.array([
+        #     min_x, (min_x * lane_equation[0]) + lane_equation[1],
+        #     max_x, (max_x * lane_equation[0]) + lane_equation[1]
+        # ]).astype(int)
+
         lane = np.array([
-            min_x, (min_x * lane_equation[0]) + lane_equation[1],
-            max_x, (max_x * lane_equation[0]) + lane_equation[1]
+            min_x, min_y, max_x, max_y
         ]).astype(int)
 
         return np.array([lane])
@@ -195,7 +203,7 @@ def get_lane_line(lines, slope_condition):
         return np.array([[0, 0, 0, 0]])
 
 
-def get_lanes_lines(lines):
+def get_lanes_lines(lines, image_shape):
     """
     Given an array of lines, compute likely lanes lines and return them
     :param lines:
@@ -203,10 +211,10 @@ def get_lanes_lines(lines):
     """
 
     left_line_slope_condition = lambda x: x < 0
-    left_line = get_lane_line(lines, left_line_slope_condition)
+    left_line = get_lane_line(lines, left_line_slope_condition, image_shape)
 
     right_line_slope_condition = lambda x: x > 0
-    right_line = get_lane_line(lines, right_line_slope_condition)
+    right_line = get_lane_line(lines, right_line_slope_condition, image_shape)
 
     return [left_line, right_line]
 
@@ -228,12 +236,12 @@ def process_image(image):
 
     lines = cv2.HoughLinesP(
         simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
-        minLineLength=10, maxLineGap=1)
+        minLineLength=10, maxLineGap=10)
 
-    lane_lanes = get_lanes_lines(lines)
+    lane_lanes = get_lanes_lines(lines, image.shape)
 
     lanes_image = np.zeros_like(image)
-    draw_lines(lanes_image, lane_lanes, thickness=8, color=[0, 0, 255])
+    draw_lines(lanes_image, lane_lanes, thickness=12, color=[255, 0, 0])
 
     lanes_overlay_image = weighted_img(lanes_image, image, alpha=1)
     return lanes_overlay_image
@@ -268,17 +276,51 @@ def process_image_experimental(image):
     return lanes_overlay_image
 
 
+def get_contours(image):
+
+    grayscale_image = grayscale(image)
+    blurred_image = gaussian_blur(grayscale_image, 3)
+    contours_image = get_image_contours(blurred_image)
+
+    return contours_image
+
+
+def get_masked_contours(image):
+
+    mask_vertices = np.array([[
+        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
+    ]])
+
+    masked_image = region_of_interest(image, mask_vertices)
+
+    return masked_image
+
+
 def detect_images_lines(directory, logger):
 
     paths = glob.glob(os.path.join(directory, "*.jpg"))
 
     for path in paths:
 
-        image = cv2.imread(path)
-        lanes_image = process_image(image)
+        image = mpimg.imread(path)
+        contours_image = get_contours(image)
+        masked_image = get_masked_contours(contours_image)
+
+        simple_contours_image = get_simple_contours_image(masked_image)
+
+        lines = cv2.HoughLinesP(
+            simple_contours_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
+            minLineLength=10, maxLineGap=10)
+
+        lane_lanes = get_lanes_lines(lines, image.shape)
+        lanes_image = np.zeros_like(image)
+        draw_lines(lanes_image, lane_lanes, thickness=12, color=[0, 0, 255])
+        #
+        # lanes_image = process_image(image)
+
         # lanes_image_experimental = process_image_experimental(image)
 
-        images = [image, lanes_image]
+        images = [image, simple_contours_image, lanes_image]
         # images = [image, lanes_image, lanes_image_experimental]
         logger.info(vlogging.VisualRecord("Detections", images))
 
@@ -286,6 +328,7 @@ def detect_images_lines(directory, logger):
 def detect_movies_lines():
 
     paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4", "challenge.mp4"]
+    # paths = ["solidWhiteRight.mp4"]
 
     for path in paths:
 
@@ -295,6 +338,26 @@ def detect_movies_lines():
         white_clip.write_videofile(output_name, audio=False)
 
 
+def detect_movies_lines_experimental():
+
+    paths = ["solidWhiteRight.mp4"]
+
+    example = moviepy.editor.VideoFileClip("P1_example.mp4")
+
+    for path in paths:
+
+        clip = moviepy.editor.VideoFileClip(path)
+
+        contours_clip = clip.fl_image(get_contours)
+        masked_contours_clip = contours_clip.fl_image(get_masked_contours)
+        lanes_detection_clip = clip.fl_image(process_image)
+
+        final_clip = moviepy.editor.clips_array(
+            [[example, contours_clip], [masked_contours_clip, lanes_detection_clip]])
+
+        output_name = path.split(".")[0] + "_output.mp4"
+        final_clip.write_videofile(output_name, audio=False, fps=24)
+
 def main():
 
     # logger = get_logger("/tmp/lanes_detection.html")
@@ -302,6 +365,7 @@ def main():
     # detect_images_lines(images_directory, logger)
 
     detect_movies_lines()
+    # detect_movies_lines_experimental()
 
 
 if __name__ == "__main__":
