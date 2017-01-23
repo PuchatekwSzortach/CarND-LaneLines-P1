@@ -31,19 +31,20 @@ def get_logger(path):
 
 
 def grayscale(img):
-    """Applies the Grayscale transform
-    This will return an image with only one color channel
-    but NOTE: to see the returned image as grayscale
-    (assuming your grayscaled image is called 'gray')
-    you should call plt.imshow(gray, cmap='gray')"""
-    # return cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    # Or use BGR2GRAY if you read an image with cv2.imread()
+    """
+    Applies the Grayscale transform
+    """
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 
 def canny(img, low_threshold, high_threshold):
     """Applies the Canny transform"""
     return cv2.Canny(img, low_threshold, high_threshold)
+
+def get_image_contours(image):
+
+    return cv2.adaptiveThreshold(image, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                 thresholdType=cv2.THRESH_BINARY_INV, blockSize=5, C=5)
 
 
 def gaussian_blur(img, kernel_size):
@@ -139,13 +140,20 @@ def detect_images_lines(directory, logger):
         image = cv2.imread(path)
         lanes_image = process_image(image)
 
-        images = [cv2.pyrDown(image) for image in [image, lanes_image]]
+        # images = [cv2.pyrDown(image) for image in [image, lanes_image]]
+        images = [image, lanes_image]
         logger.info(vlogging.VisualRecord("Detections", images))
+
+
 
 
 def process_image(image):
 
-    return image
+    grayscale_image = grayscale(image)
+    blurred_image = gaussian_blur(grayscale_image, 3)
+    contours_image = get_image_contours(blurred_image)
+
+    return contours_image
 
 
 def main():
