@@ -32,14 +32,14 @@ def get_logger(path):
     return logger
 
 
-def get_grayscale(image):
+def get_xyz_grayscale(image):
 
     changed = cv2.cvtColor(image, cv2.COLOR_RGB2XYZ)
     return changed[:,:,2]
 
 def get_grayscale_movie(image):
 
-    channel = get_grayscale(image)
+    channel = get_xyz_grayscale(image)
     return np.dstack([channel, channel, channel])
 
 
@@ -484,7 +484,7 @@ def detect_movies_lines_simple():
 
 def get_single_channel_movie(image):
 
-    graycale_image = get_grayscale(image)
+    graycale_image = get_xyz_grayscale(image)
     return np.dstack([graycale_image, graycale_image, graycale_image])
 
 
