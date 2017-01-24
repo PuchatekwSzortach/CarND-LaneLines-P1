@@ -148,32 +148,6 @@ def weighted_img(img, initial_img, alpha=0.8, beta=1., lambda_parameter=0.):
     return cv2.addWeighted(initial_img, alpha, img, beta, lambda_parameter)
 
 
-def get_simple_contours_image(binary_image):
-    """
-    Given a binary image return image that contains only simple contours
-    :param binary_image:
-    :return: image
-    """
-
-    _, contours, _ = cv2.findContours(binary_image.copy(), mode=cv2.RETR_LIST, method=cv2.CHAIN_APPROX_SIMPLE)
-
-    simple_contours = []
-
-    for contour in contours:
-
-        simple_contour = cv2.approxPolyDP(contour, epsilon=10, closed=True)
-
-        if len(simple_contour) <= 4:
-
-            simple_contours.append(contour)
-            # simple_contours.append(simple_contour)
-
-    simple_image = np.zeros_like(binary_image)
-    cv2.drawContours(simple_image, np.array(simple_contours), contourIdx=-1, color=255)
-
-    return simple_image
-
-
 def get_line_coordinates(lines):
     """
     Given a list of lines, returns a tuple (xs, ys), where xs are x coordinates and ys are y coordinates
@@ -458,31 +432,6 @@ def get_image_stack(image_processor):
     return stacked_processor
 
 
-def detect_movies_lines_simple():
-
-    paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4"]
-    # paths = ["solidWhiteRight.mp4"]
-    # paths = ["solidYellowLeft.mp4"]
-    #
-    for path in paths:
-
-        clip = moviepy.editor.VideoFileClip(path)
-
-        masked_image_stack = get_image_stack(get_masked_image)
-        masked_image_clip = clip.fl_image(masked_image_stack)
-
-        all_lines_clip = clip.fl_image(get_lines_image)
-
-        road_lanes_candidates_clip = clip.fl_image(get_road_lane_lines_candidates_image)
-        road_lanes_clip = clip.fl_image(process_image)
-
-        final_clip = moviepy.editor.clips_array(
-            [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
-
-        output_name = path.split(".")[0] + "_output.mp4"
-        final_clip.write_videofile(output_name, audio=False, fps=12)
-
-
 def get_masked_image(image):
 
     contours_image = get_contours(image)
@@ -519,13 +468,32 @@ def get_lines_image(image):
     return line_img
 
 
+def get_lines_image_challenge(image):
+
+    contours_image = get_xyz_space_contours(image)
+
+    mask_vertices = get_challenge_mask_vertices(image.shape)
+    masked_image = region_of_interest(contours_image, mask_vertices)
+
+    lines = cv2.HoughLinesP(
+        masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
+        minLineLength=10, maxLineGap=10)
+
+    line_img = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
+
+    if lines is not None:
+
+        draw_lines(line_img, lines, color=[255, 255, 255], thickness=1)
+
+    return line_img
+
+
 def get_road_lane_lines_candidates_image(image):
 
     contours_image = get_contours(image)
-    simple_contours_image = get_simple_contours_image(contours_image)
 
     mask_vertices = get_simple_mask_vertices(image.shape)
-    masked_image = region_of_interest(simple_contours_image, mask_vertices)
+    masked_image = region_of_interest(contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
         masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
@@ -546,6 +514,31 @@ def get_road_lane_lines_candidates_image(image):
     return lanes_image
 
 
+def detect_movies_lines_simple():
+
+    paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4"]
+    # paths = ["solidWhiteRight.mp4"]
+    # paths = ["solidYellowLeft.mp4"]
+    #
+    for path in paths:
+
+        clip = moviepy.editor.VideoFileClip(path)
+
+        masked_image_stack = get_image_stack(get_masked_image)
+        masked_image_clip = clip.fl_image(masked_image_stack)
+
+        all_lines_clip = clip.fl_image(get_lines_image)
+
+        road_lanes_candidates_clip = clip.fl_image(get_road_lane_lines_candidates_image)
+        road_lanes_clip = clip.fl_image(process_image)
+
+        final_clip = moviepy.editor.clips_array(
+            [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
+
+        output_name = path.split(".")[0] + "_output.mp4"
+        final_clip.write_videofile(output_name, audio=False, fps=12)
+
+
 def detect_movies_lines_challenge():
 
     path = "challenge.mp4"
@@ -558,11 +551,13 @@ def detect_movies_lines_challenge():
     masked_image_stacker = get_image_stack(get_masked_image_challenge)
     masked_image_clip = clip.fl_image(masked_image_stacker)
 
+    all_lines_clip = clip.fl_image(get_lines_image_challenge)
+
     # final_clip = moviepy.editor.clips_array(
     #     [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
     final_clip = moviepy.editor.clips_array(
-        [[contours_clip, contours_clip], [masked_image_clip, masked_image_clip]])
+        [[contours_clip, masked_image_clip], [all_lines_clip, all_lines_clip]])
 
     output_name = path.split(".")[0] + "_output.mp4"
     final_clip.write_videofile(output_name, audio=False, fps=12)
