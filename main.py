@@ -381,7 +381,7 @@ def get_road_lanes_lines(lines):
     return left_lines + right_lines
 
 
-def process_image(image):
+def pipeline(image):
 
     contours_image = get_contours(image)
     simple_contours_image = get_simple_contours_image(contours_image)
@@ -418,6 +418,10 @@ def process_image(image):
     lanes_overlay_image = weighted_img(lanes_image, image)
 
     return lanes_overlay_image
+
+def process_image(image):
+
+    return pipeline(image)
 
 
 def get_contours(image):
@@ -616,9 +620,10 @@ def main():
 
     logger = get_logger("/tmp/lanes_detection.html")
     images_directory = "./test_images"
-    # detect_images_lines(images_directory, logger)
+    detect_images_lines(images_directory, logger)
 
     detect_movies_lines_simple()
+
 
 
 if __name__ == "__main__":
