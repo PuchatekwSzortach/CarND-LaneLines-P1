@@ -165,19 +165,31 @@ def get_simple_contours_image(binary_image):
     return simple_image
 
 
+def get_line_coordinates(lines):
+    """
+    Given a list of lines, returns a tuple (xs, ys), where xs are x coordinates and ys are y coordinates
+    :param lines: list of lines, each line has (x1, y1, x2, y2) format
+    :return: tuple (xs, ys)
+    """
+
+    xs = []
+    ys = []
+
+    for line in lines:
+
+        x1, y1, x2, y2 = line[0]
+
+        xs.extend([x1, x2])
+        ys.extend([y1, y2])
+
+    return xs, ys
+
+
 def get_lane_line(lines, image_shape):
 
     try:
 
-        xs = []
-        ys = []
-
-        for line in lines:
-
-            x1, y1, x2, y2 = line[0]
-
-            xs.extend([x1, x2])
-            ys.extend([y1, y2])
+        xs, ys = get_line_coordinates(lines)
 
         lane_equation = np.polyfit(xs, ys, deg=1)
 
@@ -200,44 +212,48 @@ def get_lane_line(lines, image_shape):
         return np.array([[0, 0, 0, 0]])
 
 
+def get_line_length(line):
+
+    x1, y1, x2, y2 = line[0]
+    return np.sqrt((y2 - y1)**2 + (x2 - x1)**2)
+
+
 def get_lane_line_dev(lines, image_shape):
 
-    try:
+    # Get longest line
+    line_lengths = [get_line_length(line) for line in lines]
+    lines_lengths_tuple = zip(lines, line_lengths)
 
-        xs = []
-        ys = []
+    sorted_lines_lengths_tuple = sorted(lines_lengths_tuple, key=lambda x: x[1], reverse=True)
+    longest_line = sorted_lines_lengths_tuple[0][0]
+    return longest_line
 
-        for line in lines:
 
-            x1, y1, x2, y2 = line[0]
-
-            xs.extend([x1, x2])
-            ys.extend([y1, y2])
-
-        lane_equation = np.polyfit(xs, ys, deg=1)
-
-        min_y = min(ys)
-        min_x = round((min_y - lane_equation[1]) / lane_equation[0])
-
-        max_y = image_shape[0]
-        max_x = round((max_y - lane_equation[1]) / lane_equation[0])
-
-        lane = np.array([
-            min_x, min_y, max_x, max_y
-        ]).astype(int)
-
-        print(lane)
-
-        return lane
-
-    except TypeError:
-
-        # If no lines were detected, np.polyfit will get empty data
-        # For simplicity just return a 0 line then
-        lane = np.array([0, 0, 0, 0])
-
-        print(lane)
-        return lane
+    # try:
+    #
+    #     xs, ys = get_line_coordinates(lines)
+    #
+    #
+    #
+    #     lane_equation = np.polyfit(xs, ys, deg=1)
+    #
+    #     min_y = min(ys)
+    #     min_x = round((min_y - lane_equation[1]) / lane_equation[0])
+    #
+    #     max_y = image_shape[0]
+    #     max_x = round((max_y - lane_equation[1]) / lane_equation[0])
+    #
+    #     lane = np.array([
+    #         min_x, min_y, max_x, max_y
+    #     ]).astype(int)
+    #
+    #     return np.array([lane])
+    #
+    # except TypeError:
+    #
+    #     # If no lines were detected, np.polyfit will get empty data
+    #     # For simplicity just return a 0 line then
+    #     return np.array([[0, 0, 0, 0]])
 
 
 def is_line_left_lane_candidate(line, image_shape):
@@ -446,8 +462,10 @@ def get_road_lanes_movie(image):
     left_lines_candidates = get_left_road_lane_candidates(lines, image.shape)
     right_lines_candidates = get_right_road_lane_candidates(lines, image.shape)
 
-    left_lane_line = get_lane_line(left_lines_candidates, image.shape)
-    right_lane_line = get_lane_line(right_lines_candidates, image.shape)
+    # left_lane_line = get_lane_line(left_lines_candidates, image.shape)
+    # right_lane_line = get_lane_line(right_lines_candidates, image.shape)
+    left_lane_line = get_lane_line_dev(left_lines_candidates, image.shape)
+    right_lane_line = get_lane_line_dev(right_lines_candidates, image.shape)
 
     # lane_lines = left_lines_candidates + right_lines_candidates
     lane_lines = [left_lane_line, right_lane_line]
