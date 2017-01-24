@@ -214,51 +214,100 @@ def get_lane_line(lines, image_shape):
 
 def get_line_length(line):
 
-    x1, y1, x2, y2 = line[0]
+    x1, y1, x2, y2 = line
     return np.sqrt((y2 - y1)**2 + (x2 - x1)**2)
+
+
+def are_lines_collinear(first, second):
+    """
+    Given two lines check if they are approximately colinear
+    :param first: line
+    :param second: line
+    :return: boolean
+    """
+
+    first_equation = np.polyfit([first[0], first[2]], [first[1], first[3]], deg=1)
+    second_equation = np.polyfit([second[0], second[2]], [second[1], second[3]], deg=1)
+
+    first_slope_angle = np.rad2deg(np.arctan(first_equation[0]))
+    second_slope_angle = np.rad2deg(np.arctan(second_equation[0]))
+
+    angular_distance = np.abs(first_slope_angle - second_slope_angle)
+    offset_distance = np.abs(first_equation[1] - second_equation[1])
+
+    return angular_distance < 2 and offset_distance < 10
+
+
+def merge_lines(first, second):
+
+    first_x1, first_y1, first_x2, first_y2 = first
+    second_x1, second_y1, second_x2, second_y2 = second
+
+    x1 = min(first_x1, second_x1)
+    y1 = first_y1 if x1 == first_x1 else second_y1
+
+    x2 = max(first_x2, second_x2)
+    y2 = first_y2 if x2 == first_x2 else second_y2
+
+    return [x1, y1, x2, y2]
 
 
 def get_lane_line_dev(lines, image_shape):
 
-    # Get longest line
+    # Get lines lengths
     line_lengths = [get_line_length(line) for line in lines]
     lines_lengths_tuple = zip(lines, line_lengths)
 
+    # Sort lines by length in descending order
     sorted_lines_lengths_tuple = sorted(lines_lengths_tuple, key=lambda x: x[1], reverse=True)
-    longest_line = sorted_lines_lengths_tuple[0][0]
-    return longest_line
 
+    # Extract lines
+    lines = [line_length_tuple[0] for line_length_tuple in sorted_lines_lengths_tuple
+                  if line_length_tuple[1] > 10]
 
-    # try:
-    #
-    #     xs, ys = get_line_coordinates(lines)
-    #
-    #
-    #
-    #     lane_equation = np.polyfit(xs, ys, deg=1)
-    #
-    #     min_y = min(ys)
-    #     min_x = round((min_y - lane_equation[1]) / lane_equation[0])
-    #
-    #     max_y = image_shape[0]
-    #     max_x = round((max_y - lane_equation[1]) / lane_equation[0])
-    #
-    #     lane = np.array([
-    #         min_x, min_y, max_x, max_y
-    #     ]).astype(int)
-    #
-    #     return np.array([lane])
-    #
-    # except TypeError:
-    #
-    #     # If no lines were detected, np.polyfit will get empty data
-    #     # For simplicity just return a 0 line then
-    #     return np.array([[0, 0, 0, 0]])
+    lane_candidates = []
+
+    for line in lines:
+
+        is_collinear_line_found = False
+
+        for index in range(len(lane_candidates)):
+
+            if are_lines_collinear(lane_candidates[index], line):
+
+                is_collinear_line_found = True
+                lane_candidates[index] = merge_lines(lane_candidates[index], line)
+
+        if not is_collinear_line_found:
+
+            lane_candidates.append(line)
+
+    # Once again sort lines by lengths and choose longest one
+    lane_candidates_lengths = [get_line_length(line) for line in lane_candidates]
+    lanes_candidates_lengths_tuple = zip(lane_candidates, lane_candidates_lengths)
+
+    sorted_lanes_candidates_lengths_tuple = sorted(lanes_candidates_lengths_tuple, key=lambda x: x[1], reverse=True)
+    lane = sorted_lanes_candidates_lengths_tuple[0][0]
+
+    # Get lane equation
+    x1, y1, x2, y2 = lane
+    lane_equation = np.polyfit([x1, x2], [y1, y2], deg=1)
+
+    # Extrapolate lane from bottom of screen to its furthest reach
+    min_y = min(y1, y2)
+    min_x = round((min_y - lane_equation[1]) / lane_equation[0])
+
+    max_y = image_shape[0]
+    max_x = round((max_y - lane_equation[1]) / lane_equation[0])
+
+    lane = [int(coordinate) for coordinate in [min_x, min_y, max_x, max_y]]
+    return lane
+
 
 
 def is_line_left_lane_candidate(line, image_shape):
 
-    x1, y1, x2, y2 = line[0]
+    x1, y1, x2, y2 = line
 
     slope_degrees = np.rad2deg(np.arctan2(y2 - y1, x2 - x1))
     is_left_lane_slope = -45 < slope_degrees < -30
@@ -270,7 +319,7 @@ def is_line_left_lane_candidate(line, image_shape):
 
 def is_line_right_lane_candidate(line, image_shape):
 
-    x1, y1, x2, y2 = line[0]
+    x1, y1, x2, y2 = line
 
     slope_degrees = np.rad2deg(np.arctan2(y2 - y1, x2 - x1))
     is_right_lane_slope = 30 < slope_degrees < 45
@@ -367,8 +416,8 @@ def detect_images_lines(directory, logger):
 
 def detect_movies_lines():
 
-    paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4", "challenge.mp4"]
-    # paths = ["challenge.mp4"]
+    # paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4", "challenge.mp4"]
+    paths = ["challenge.mp4"]
     # paths = ["solidWhiteRight.mp4"]
 
     for path in paths:
@@ -376,7 +425,7 @@ def detect_movies_lines():
         clip = moviepy.editor.VideoFileClip(path)
 
         simplified_contours_clip = clip.fl_image(get_simplified_contours_movie)
-        lines_clip = simplified_contours_clip.fl_image(get_lines_movie)
+        lines_clip = simplified_contours_clip.fl_image(get_simplified_lines_movie)
         road_lanes_candidates_clip = simplified_contours_clip.fl_image(get_road_lane_lines_candidates_movie)
         road_lanes_clip = clip.fl_image(get_road_lanes_movie)
 
@@ -409,7 +458,7 @@ def get_simplified_contours_movie(image):
     return np.dstack([simple_contours_image, simple_contours_image, simple_contours_image])
 
 
-def get_lines_movie(simple_image):
+def get_simplified_lines_movie(simple_image):
 
     lines = cv2.HoughLinesP(
         simple_image[:, :, 0], rho=4, theta=math.pi / 180, threshold=80, lines=np.array([]),
@@ -430,51 +479,67 @@ def get_road_lane_lines_candidates_movie(simple_image):
         simple_image[:, :, 0], rho=4, theta=math.pi / 180, threshold=80, lines=np.array([]),
         minLineLength=10, maxLineGap=10)
 
+    # Hough lines are wrapped in unnecessary list, extract them for easier processing
+    lines = [line[0] for line in lines]
+
     line_img = np.zeros((simple_image.shape[0], simple_image.shape[1], 3), dtype=np.uint8)
 
-    lane_lanes = get_left_road_lane_candidates(lines, line_img.shape) + \
+    lane_lines = get_left_road_lane_candidates(lines, line_img.shape) + \
                  get_right_road_lane_candidates(lines, line_img.shape)
 
-    draw_lines(line_img, lane_lanes, color=[255, 255, 255])
+    # Wrap up lines to format expected by draw_lines
+    lane_lines = [[line] for line in lane_lines]
+
+    draw_lines(line_img, lane_lines, color=[255, 255, 255])
 
     return line_img
 
 
 def get_road_lanes_movie(image):
 
-    grayscale_image = get_grayscale(image)
+    try:
 
-    blurred_image = gaussian_blur(grayscale_image, 7)
-    contours_image = get_image_contours(blurred_image)
+        grayscale_image = get_grayscale(image)
 
-    mask_vertices = np.array([[
-        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-    ]])
+        blurred_image = gaussian_blur(grayscale_image, 7)
+        contours_image = get_image_contours(blurred_image)
 
-    masked_image = region_of_interest(contours_image, mask_vertices)
+        mask_vertices = np.array([[
+            (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
+        ]])
 
-    simple_contours_image = get_simple_contours_image(masked_image)
+        masked_image = region_of_interest(contours_image, mask_vertices)
 
-    lines = cv2.HoughLinesP(
-        simple_contours_image, rho=4, theta=math.pi / 180, threshold=80, lines=np.array([]),
-        minLineLength=10, maxLineGap=10)
+        simple_contours_image = get_simple_contours_image(masked_image)
 
-    left_lines_candidates = get_left_road_lane_candidates(lines, image.shape)
-    right_lines_candidates = get_right_road_lane_candidates(lines, image.shape)
+        lines = cv2.HoughLinesP(
+            simple_contours_image, rho=4, theta=math.pi / 180, threshold=80, lines=np.array([]),
+            minLineLength=10, maxLineGap=10)
 
-    # left_lane_line = get_lane_line(left_lines_candidates, image.shape)
-    # right_lane_line = get_lane_line(right_lines_candidates, image.shape)
-    left_lane_line = get_lane_line_dev(left_lines_candidates, image.shape)
-    right_lane_line = get_lane_line_dev(right_lines_candidates, image.shape)
+        # Hough lines are wrapped in unnecessary list, extract them for easier processing
+        lines = [line[0] for line in lines]
 
-    # lane_lines = left_lines_candidates + right_lines_candidates
-    lane_lines = [left_lane_line, right_lane_line]
+        left_lines_candidates = get_left_road_lane_candidates(lines, image.shape)
+        right_lines_candidates = get_right_road_lane_candidates(lines, image.shape)
 
-    lanes_image = np.zeros_like(image)
-    draw_lines(lanes_image, lane_lines, thickness=12, color=[255, 0, 0])
+        left_lane_line = get_lane_line_dev(left_lines_candidates, image.shape)
+        right_lane_line = get_lane_line_dev(right_lines_candidates, image.shape)
 
-    lanes_overlay_image = weighted_img(lanes_image, image, alpha=1)
-    return lanes_overlay_image
+        lane_lines = [left_lane_line, right_lane_line]
+
+        # Wrap up lines to format expected by draw_lines
+        lane_lines = [[line] for line in lane_lines]
+
+        lanes_image = np.zeros_like(image)
+        draw_lines(lanes_image, lane_lines, thickness=12, color=[255, 0, 0])
+
+        lanes_overlay_image = weighted_img(lanes_image, image, alpha=1)
+        return lanes_overlay_image
+
+    except:
+
+        # Probably failed to detect any lines
+        return image
 
 
 def main():
