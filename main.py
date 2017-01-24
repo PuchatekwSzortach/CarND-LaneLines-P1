@@ -484,6 +484,17 @@ def get_masked_image(image):
     return region_of_interest(simple_contours_image, mask_vertices)
 
 
+def get_masked_image_challenge(image):
+
+    contours_image = get_xyz_space_contours(image)
+
+    mask_vertices = np.array([[
+        (500, 450), (100, image.shape[0] - 50), (image.shape[1] - 100, image.shape[0] - 50), (image.shape[1] - 500, 450)
+    ]])
+
+    return region_of_interest(contours_image, mask_vertices)
+
+
 def get_lines_image(image):
 
     contours_image = get_contours(image)
@@ -547,11 +558,14 @@ def detect_movies_lines_challenge():
     contours_stacker = get_image_stack(get_xyz_space_contours)
     contours_clip = clip.fl_image(contours_stacker)
 
+    masked_image_stacker = get_image_stack(get_masked_image_challenge)
+    masked_image_clip = clip.fl_image(masked_image_stacker)
+
     # final_clip = moviepy.editor.clips_array(
     #     [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
     final_clip = moviepy.editor.clips_array(
-        [[clip, clip], [contours_clip, contours_clip]])
+        [[masked_image_clip, masked_image_clip], [masked_image_clip, masked_image_clip]])
 
     output_name = path.split(".")[0] + "_output.mp4"
     final_clip.write_videofile(output_name, audio=False, fps=12)
@@ -563,8 +577,8 @@ def main():
     images_directory = "./test_images"
     # detect_images_lines(images_directory, logger)
     #
-    detect_movies_lines_simple()
-    # detect_movies_lines_challenge()
+    # detect_movies_lines_simple()
+    detect_movies_lines_challenge()
 
 
 if __name__ == "__main__":
