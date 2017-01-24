@@ -38,12 +38,6 @@ def get_xyz_grayscale(image):
     return changed[:,:,2]
 
 
-def get_grayscale_movie(image):
-
-    channel = get_xyz_grayscale(image)
-    return np.dstack([channel, channel, channel])
-
-
 def canny(img, low_threshold, high_threshold):
     """Applies the Canny transform"""
     return cv2.Canny(img, low_threshold, high_threshold)
@@ -369,30 +363,15 @@ def get_filtered_lines(lines):
     return filtered_lines
 
 
-def get_road_lanes_lines(lines):
-    """
-    Given an array of lines, compute likely lanes lines and return them
-    :param lines:
-    :return: lines
-    """
-
-    left_lines = [line for line in lines if is_line_left_lane_candidate(line)]
-    right_lines = [line for line in lines if is_line_right_lane_candidate(line)]
-
-
-    return left_lines + right_lines
-
-
 def pipeline(image):
 
     contours_image = get_contours(image)
-    simple_contours_image = get_simple_contours_image(contours_image)
 
     mask_vertices = np.array([[
         (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
     ]])
 
-    masked_image = region_of_interest(simple_contours_image, mask_vertices)
+    masked_image = region_of_interest(contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
         masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
@@ -436,15 +415,13 @@ def get_contours(image):
     return contours_image
 
 
-def get_masked_contours(image):
+def get_xyz_space_contours(image):
 
-    mask_vertices = np.array([[
-        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-    ]])
+    grayscale_image = get_xyz_grayscale(image)
+    blurred_image = gaussian_blur(grayscale_image, 5)
+    contours_image = get_image_contours(blurred_image)
 
-    masked_image = region_of_interest(image, mask_vertices)
-
-    return masked_image
+    return contours_image
 
 
 def detect_images_lines(directory, logger):
@@ -454,10 +431,20 @@ def detect_images_lines(directory, logger):
     for path in paths:
 
         image = mpimg.imread(path)
-        lanes_image = get_road_lanes_movie(image)
+        lanes_image = process_image(image)
         lanes_image = cv2.cvtColor(lanes_image, cv2.COLOR_RGB2BGR)
 
         logger.info(vlogging.VisualRecord("Detections", lanes_image))
+
+
+def get_image_stack(image_processor):
+
+    def stacked_processor(image):
+
+        processed_image = image_processor(image)
+        return np.dstack([processed_image, processed_image, processed_image])
+
+    return stacked_processor
 
 
 def detect_movies_lines_simple():
@@ -470,11 +457,13 @@ def detect_movies_lines_simple():
 
         clip = moviepy.editor.VideoFileClip(path)
 
-        masked_image_clip = clip.fl_image(get_masked_image_movie)
-        all_lines_clip = clip.fl_image(get_lines_movie)
+        masked_image_stack = get_image_stack(get_masked_image)
+        masked_image_clip = clip.fl_image(masked_image_stack)
 
-        road_lanes_candidates_clip = clip.fl_image(get_road_lane_lines_candidates_movie)
-        road_lanes_clip = clip.fl_image(get_road_lanes_movie)
+        all_lines_clip = clip.fl_image(get_lines_image)
+
+        road_lanes_candidates_clip = clip.fl_image(get_road_lane_lines_candidates_image)
+        road_lanes_clip = clip.fl_image(process_image)
 
         final_clip = moviepy.editor.clips_array(
             [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
@@ -483,27 +472,7 @@ def detect_movies_lines_simple():
         final_clip.write_videofile(output_name, audio=False, fps=12)
 
 
-def get_single_channel_movie(image):
-
-    graycale_image = get_xyz_grayscale(image)
-    return np.dstack([graycale_image, graycale_image, graycale_image])
-
-
-def get_contours_image_movie(image):
-
-    contours_image = get_contours(image)
-    return np.dstack([contours_image, contours_image, contours_image])
-
-
-def get_simple_contours_image_movie(image):
-
-    contours_image = get_contours(image)
-    simple_contours_image = get_simple_contours_image(contours_image)
-
-    return np.dstack([simple_contours_image, simple_contours_image, simple_contours_image])
-
-
-def get_masked_image_movie(image):
+def get_masked_image(image):
 
     contours_image = get_contours(image)
     simple_contours_image = get_simple_contours_image(contours_image)
@@ -512,11 +481,10 @@ def get_masked_image_movie(image):
         (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
     ]])
 
-    masked_image = region_of_interest(simple_contours_image, mask_vertices)
-    return np.dstack([masked_image, masked_image, masked_image])
+    return region_of_interest(simple_contours_image, mask_vertices)
 
 
-def get_lines_movie(image):
+def get_lines_image(image):
 
     contours_image = get_contours(image)
     simple_contours_image = get_simple_contours_image(contours_image)
@@ -540,7 +508,7 @@ def get_lines_movie(image):
     return line_img
 
 
-def get_road_lane_lines_candidates_movie(image):
+def get_road_lane_lines_candidates_image(image):
 
     contours_image = get_contours(image)
     simple_contours_image = get_simple_contours_image(contours_image)
@@ -570,53 +538,23 @@ def get_road_lane_lines_candidates_movie(image):
     return lanes_image
 
 
-def get_extrapolated_line(line, min_x, max_x):
+def detect_movies_lines_challenge():
 
-    line_equation = np.polyfit([line[0], line[2]], [line[1], line[3]], deg=1)
+    path = "challenge.mp4"
 
-    min_y = (line_equation[0] * min_x) + line_equation[1]
-    max_y = (line_equation[0] * max_x) + line_equation[1]
+    clip = moviepy.editor.VideoFileClip(path)
 
-    return [int(coordinate) for coordinate in [min_x, min_y, max_x, max_y]]
+    contours_stacker = get_image_stack(get_xyz_space_contours)
+    contours_clip = clip.fl_image(contours_stacker)
 
+    # final_clip = moviepy.editor.clips_array(
+    #     [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
-def get_road_lanes_movie(image):
+    final_clip = moviepy.editor.clips_array(
+        [[clip, clip], [contours_clip, contours_clip]])
 
-    contours_image = get_contours(image)
-    # simple_contours_image = get_simple_contours_image(contours_image)
-
-    mask_vertices = np.array([[
-        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-    ]])
-
-    masked_image = region_of_interest(contours_image, mask_vertices)
-
-    lines = cv2.HoughLinesP(
-        masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
-        minLineLength=10, maxLineGap=10)
-
-    # Hough lines are wrapped in unnecessary list, extract them for easier processing
-    lines = [line[0] for line in lines]
-
-    left_lines_candidates = get_left_road_lane_candidates(lines, image.shape)
-    right_lines_candidates = get_right_road_lane_candidates(lines, image.shape)
-
-    filtered_left_lines_candidates = get_filtered_lines(left_lines_candidates)
-    filtered_right_lines_candidates = get_filtered_lines(right_lines_candidates)
-
-    left_lane_line = get_lane_line(filtered_left_lines_candidates, image.shape)
-    right_lane_line = get_lane_line(filtered_right_lines_candidates, image.shape)
-
-    lane_lines = [left_lane_line, right_lane_line]
-
-    # Wrap up lines to format expected by draw_lines
-    lane_lines = [[line] for line in lane_lines]
-
-    lanes_image = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
-    draw_lines(lanes_image, lane_lines, thickness=10, color=[255, 0, 0])
-    lanes_overlay_image = weighted_img(lanes_image, image)
-
-    return lanes_overlay_image
+    output_name = path.split(".")[0] + "_output.mp4"
+    final_clip.write_videofile(output_name, audio=False, fps=12)
 
 
 def main():
@@ -626,6 +564,7 @@ def main():
     # detect_images_lines(images_directory, logger)
     #
     detect_movies_lines_simple()
+    # detect_movies_lines_challenge()
 
 
 if __name__ == "__main__":
