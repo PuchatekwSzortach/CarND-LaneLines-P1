@@ -266,6 +266,7 @@ def get_lane_line_dev(lines, image_shape):
                   if line_length_tuple[1] > 10]
 
     lane_candidates = []
+    lane_candidates_lengths = []
 
     for line in lines:
 
@@ -277,16 +278,17 @@ def get_lane_line_dev(lines, image_shape):
 
                 is_collinear_line_found = True
                 lane_candidates[index] = merge_lines(lane_candidates[index], line)
+                lane_candidates_lengths[index] += get_line_length(line)
 
         if not is_collinear_line_found:
 
             lane_candidates.append(line)
+            lane_candidates_lengths.append(get_line_length(line))
 
-    # Once again sort lines by lengths and choose longest one
-    lane_candidates_lengths = [get_line_length(line) for line in lane_candidates]
-    lanes_candidates_lengths_tuple = zip(lane_candidates, lane_candidates_lengths)
+    # Get lane with longest cumulative length
+    lane_candidates_lengths_tuples = zip(lane_candidates, lane_candidates_lengths)
+    sorted_lanes_candidates_lengths_tuple = sorted(lane_candidates_lengths_tuples, key=lambda x: x[1], reverse=True)
 
-    sorted_lanes_candidates_lengths_tuple = sorted(lanes_candidates_lengths_tuple, key=lambda x: x[1], reverse=True)
     lane = sorted_lanes_candidates_lengths_tuple[0][0]
 
     # Get lane equation
@@ -322,7 +324,7 @@ def is_line_right_lane_candidate(line, image_shape):
     x1, y1, x2, y2 = line
 
     slope_degrees = np.rad2deg(np.arctan2(y2 - y1, x2 - x1))
-    is_right_lane_slope = 30 < slope_degrees < 45
+    is_right_lane_slope = 30 < slope_degrees < 60
 
     is_line_right_of_vehicle = x1 > image_shape[1] // 2 and x2 > image_shape[1] // 2
 
@@ -425,11 +427,11 @@ def detect_movies_lines():
         clip = moviepy.editor.VideoFileClip(path)
 
         simplified_contours_clip = clip.fl_image(get_simplified_contours_movie)
-        lines_clip = simplified_contours_clip.fl_image(get_simplified_lines_movie)
+        simple_lines_clip = simplified_contours_clip.fl_image(get_simplified_lines_movie)
         road_lanes_candidates_clip = simplified_contours_clip.fl_image(get_road_lane_lines_candidates_movie)
         road_lanes_clip = clip.fl_image(get_road_lanes_movie)
 
-        final_clip = moviepy.editor.clips_array([[clip, lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
+        final_clip = moviepy.editor.clips_array([[clip, simple_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
         output_name = path.split(".")[0] + "_output.mp4"
         final_clip.write_videofile(output_name, audio=False, fps=12)
@@ -461,7 +463,7 @@ def get_simplified_contours_movie(image):
 def get_simplified_lines_movie(simple_image):
 
     lines = cv2.HoughLinesP(
-        simple_image[:, :, 0], rho=4, theta=math.pi / 180, threshold=80, lines=np.array([]),
+        simple_image[:, :, 0], rho=4, theta=math.pi / 180, threshold=50, lines=np.array([]),
         minLineLength=10, maxLineGap=10)
 
     line_img = np.zeros((simple_image.shape[0], simple_image.shape[1], 3), dtype=np.uint8)
