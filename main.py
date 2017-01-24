@@ -37,6 +37,7 @@ def get_xyz_grayscale(image):
     changed = cv2.cvtColor(image, cv2.COLOR_RGB2XYZ)
     return changed[:,:,2]
 
+
 def get_grayscale_movie(image):
 
     channel = get_xyz_grayscale(image)
@@ -192,7 +193,7 @@ def get_lane_line(lines, image_shape):
         xs, ys = get_line_coordinates(lines)
         lane_equation = np.polyfit(xs, ys, deg=1)
 
-        min_y = min(ys)
+        min_y = 320
         min_x = (min_y - lane_equation[1]) / lane_equation[0]
 
         max_y = image_shape[0]
@@ -620,12 +621,11 @@ def get_road_lanes_movie(image):
 
 def main():
 
-    # logger = get_logger("/tmp/lanes_detection.html")
-    # images_directory = "./test_images"
+    logger = get_logger("/tmp/lanes_detection.html")
+    images_directory = "./test_images"
     # detect_images_lines(images_directory, logger)
-
+    #
     detect_movies_lines_simple()
-
 
 
 if __name__ == "__main__":
