@@ -154,9 +154,10 @@ def get_simple_contours_image(binary_image):
 
         simple_contour = cv2.approxPolyDP(contour, epsilon=10, closed=True)
 
-        if len(simple_contour) <= 20:
+        if len(simple_contour) <= 4:
 
             simple_contours.append(contour)
+            # simple_contours.append(simple_contour)
 
     simple_image = np.zeros_like(binary_image)
     cv2.drawContours(simple_image, np.array(simple_contours), contourIdx=-1, color=255)
@@ -419,6 +420,7 @@ def pipeline(image):
 
     return lanes_overlay_image
 
+
 def process_image(image):
 
     return pipeline(image)
@@ -426,7 +428,7 @@ def process_image(image):
 
 def get_contours(image):
 
-    grayscale_image = get_grayscale(image)
+    grayscale_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     blurred_image = gaussian_blur(grayscale_image, 5)
     contours_image = get_image_contours(blurred_image)
 
@@ -580,13 +582,13 @@ def get_extrapolated_line(line, min_x, max_x):
 def get_road_lanes_movie(image):
 
     contours_image = get_contours(image)
-    simple_contours_image = get_simple_contours_image(contours_image)
+    # simple_contours_image = get_simple_contours_image(contours_image)
 
     mask_vertices = np.array([[
         (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
     ]])
 
-    masked_image = region_of_interest(simple_contours_image, mask_vertices)
+    masked_image = region_of_interest(contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
         masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
@@ -618,9 +620,9 @@ def get_road_lanes_movie(image):
 
 def main():
 
-    logger = get_logger("/tmp/lanes_detection.html")
-    images_directory = "./test_images"
-    detect_images_lines(images_directory, logger)
+    # logger = get_logger("/tmp/lanes_detection.html")
+    # images_directory = "./test_images"
+    # detect_images_lines(images_directory, logger)
 
     detect_movies_lines_simple()
 
