@@ -14,6 +14,20 @@ import moviepy.editor
 import matplotlib.image as mpimg
 
 
+def get_simple_mask_vertices(image_shape):
+
+    return np.array([[
+        (400, 300), (50, image_shape[0]), (image_shape[1] - 50, image_shape[0]), (image_shape[1] - 400, 300)
+    ]])
+
+
+def get_challenge_mask_vertices(image_shape):
+
+    return np.array([[
+        (500, 450), (100, image_shape[0] - 50), (image_shape[1] - 100, image_shape[0] - 50), (image_shape[1] - 500, 450)
+    ]])
+
+
 def get_logger(path):
     """
     Returns a logger that writes to an html page
@@ -367,10 +381,7 @@ def pipeline(image):
 
     contours_image = get_contours(image)
 
-    mask_vertices = np.array([[
-        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-    ]])
-
+    mask_vertices = get_simple_mask_vertices(image.shape)
     masked_image = region_of_interest(contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
@@ -452,7 +463,7 @@ def detect_movies_lines_simple():
     paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4"]
     # paths = ["solidWhiteRight.mp4"]
     # paths = ["solidYellowLeft.mp4"]
-
+    #
     for path in paths:
 
         clip = moviepy.editor.VideoFileClip(path)
@@ -475,22 +486,15 @@ def detect_movies_lines_simple():
 def get_masked_image(image):
 
     contours_image = get_contours(image)
-    simple_contours_image = get_simple_contours_image(contours_image)
+    mask_vertices = get_simple_mask_vertices(image.shape)
 
-    mask_vertices = np.array([[
-        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-    ]])
-
-    return region_of_interest(simple_contours_image, mask_vertices)
+    return region_of_interest(contours_image, mask_vertices)
 
 
 def get_masked_image_challenge(image):
 
     contours_image = get_xyz_space_contours(image)
-
-    mask_vertices = np.array([[
-        (500, 450), (100, image.shape[0] - 50), (image.shape[1] - 100, image.shape[0] - 50), (image.shape[1] - 500, 450)
-    ]])
+    mask_vertices = get_challenge_mask_vertices(image.shape)
 
     return region_of_interest(contours_image, mask_vertices)
 
@@ -498,13 +502,9 @@ def get_masked_image_challenge(image):
 def get_lines_image(image):
 
     contours_image = get_contours(image)
-    simple_contours_image = get_simple_contours_image(contours_image)
 
-    mask_vertices = np.array([[
-        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-    ]])
-
-    masked_image = region_of_interest(simple_contours_image, mask_vertices)
+    mask_vertices = get_simple_mask_vertices(image.shape)
+    masked_image = region_of_interest(contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
         masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
@@ -524,10 +524,7 @@ def get_road_lane_lines_candidates_image(image):
     contours_image = get_contours(image)
     simple_contours_image = get_simple_contours_image(contours_image)
 
-    mask_vertices = np.array([[
-        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-    ]])
-
+    mask_vertices = get_simple_mask_vertices(image.shape)
     masked_image = region_of_interest(simple_contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
@@ -565,7 +562,7 @@ def detect_movies_lines_challenge():
     #     [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
     final_clip = moviepy.editor.clips_array(
-        [[masked_image_clip, masked_image_clip], [masked_image_clip, masked_image_clip]])
+        [[contours_clip, contours_clip], [masked_image_clip, masked_image_clip]])
 
     output_name = path.split(".")[0] + "_output.mp4"
     final_clip.write_videofile(output_name, audio=False, fps=12)
