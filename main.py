@@ -32,27 +32,26 @@ def get_logger(path):
     return logger
 
 
-def grayscale(img):
-    """
-    Applies the Grayscale transform
-    """
-    return cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-
 def get_grayscale(image):
 
     changed = cv2.cvtColor(image, cv2.COLOR_RGB2XYZ)
     return changed[:,:,2]
+
+def get_grayscale_movie(image):
+
+    channel = get_grayscale(image)
+    return np.dstack([channel, channel, channel])
 
 
 def canny(img, low_threshold, high_threshold):
     """Applies the Canny transform"""
     return cv2.Canny(img, low_threshold, high_threshold)
 
+
 def get_image_contours(image):
 
     return cv2.adaptiveThreshold(image, maxValue=255, adaptiveMethod=cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                 thresholdType=cv2.THRESH_BINARY_INV, blockSize=15, C=5)
+                                 thresholdType=cv2.THRESH_BINARY_INV, blockSize=7, C=5)
 
 
 def gaussian_blur(img, kernel_size):
@@ -155,7 +154,7 @@ def get_simple_contours_image(binary_image):
 
         simple_contour = cv2.approxPolyDP(contour, epsilon=10, closed=True)
 
-        if len(simple_contour) <= 8:
+        if len(simple_contour) <= 20:
 
             simple_contours.append(contour)
 
@@ -235,35 +234,36 @@ def are_lines_collinear(first, second):
     angular_distance = np.abs(first_slope_angle - second_slope_angle)
     offset_distance = np.abs(first_equation[1] - second_equation[1])
 
-    return angular_distance < 2 and offset_distance < 10
+    return angular_distance < 15 and offset_distance < 20
 
 
 def merge_lines(first, second):
 
-    first_x1, first_y1, first_x2, first_y2 = first
-    second_x1, second_y1, second_x2, second_y2 = second
+    xs = [first[0], first[2], second[0], second[2]]
+    ys = [first[1], first[3], second[1], second[3]]
 
-    x1 = min(first_x1, second_x1)
-    y1 = first_y1 if x1 == first_x1 else second_y1
+    min_index = np.argmin(xs)
+    max_index = np.argmax(xs)
 
-    x2 = max(first_x2, second_x2)
-    y2 = first_y2 if x2 == first_x2 else second_y2
-
-    return [x1, y1, x2, y2]
+    return [xs[min_index], ys[min_index], xs[max_index], ys[max_index]]
 
 
 def get_lane_line_dev(lines, image_shape):
+
+    if len(lines) == 0:
+
+        # If no lines are available, just return an empty line for simplicity
+        return [0, 0, 0, 0]
 
     # Get lines lengths
     line_lengths = [get_line_length(line) for line in lines]
     lines_lengths_tuple = zip(lines, line_lengths)
 
     # Sort lines by length in descending order
-    sorted_lines_lengths_tuple = sorted(lines_lengths_tuple, key=lambda x: x[1], reverse=True)
+    sorted_lines_lengths_tuples = sorted(lines_lengths_tuple, key=lambda x: x[1], reverse=True)
 
-    # Extract lines
-    lines = [line_length_tuple[0] for line_length_tuple in sorted_lines_lengths_tuple
-                  if line_length_tuple[1] > 10]
+    # Extract lines, now they are in descending length order
+    lines = [line_length_tuple[0] for line_length_tuple in sorted_lines_lengths_tuples]
 
     lane_candidates = []
     lane_candidates_lengths = []
@@ -271,14 +271,17 @@ def get_lane_line_dev(lines, image_shape):
     for line in lines:
 
         is_collinear_line_found = False
+        index = 0
 
-        for index in range(len(lane_candidates)):
+        while index < len(lane_candidates) and not is_collinear_line_found:
 
             if are_lines_collinear(lane_candidates[index], line):
 
                 is_collinear_line_found = True
                 lane_candidates[index] = merge_lines(lane_candidates[index], line)
                 lane_candidates_lengths[index] += get_line_length(line)
+
+            index += 1
 
         if not is_collinear_line_found:
 
@@ -306,15 +309,15 @@ def get_lane_line_dev(lines, image_shape):
     return lane
 
 
-
 def is_line_left_lane_candidate(line, image_shape):
 
     x1, y1, x2, y2 = line
 
     slope_degrees = np.rad2deg(np.arctan2(y2 - y1, x2 - x1))
-    is_left_lane_slope = -45 < slope_degrees < -30
+    is_left_lane_slope = -60 < slope_degrees < -15
 
-    is_line_left_of_vehicle = x1 < image_shape[1] // 2 and x2 < image_shape[1] // 2
+    max_x = 0.6 * image_shape[1]
+    is_line_left_of_vehicle = x1 < max_x and max_x
 
     return is_left_lane_slope and is_line_left_of_vehicle
 
@@ -324,9 +327,10 @@ def is_line_right_lane_candidate(line, image_shape):
     x1, y1, x2, y2 = line
 
     slope_degrees = np.rad2deg(np.arctan2(y2 - y1, x2 - x1))
-    is_right_lane_slope = 30 < slope_degrees < 60
+    is_right_lane_slope = 15 < slope_degrees < 60
 
-    is_line_right_of_vehicle = x1 > image_shape[1] // 2 and x2 > image_shape[1] // 2
+    min_x = 0.4 * image_shape[1]
+    is_line_right_of_vehicle = x1 > min_x and x2 > min_x
 
     return is_right_lane_slope and is_line_right_of_vehicle
 
@@ -357,9 +361,9 @@ def get_road_lanes_lines(lines):
 
 def process_image(image):
 
-    grayscale_image = grayscale(image)
-    # blurred_image = gaussian_blur(grayscale_image, 3)
-    contours_image = get_image_contours(grayscale_image)
+    grayscale_image = get_grayscale(image)
+    blurred_image = gaussian_blur(grayscale_image, 3)
+    contours_image = get_image_contours(blurred_image)
 
     mask_vertices = np.array([[
         (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
@@ -385,8 +389,8 @@ def process_image(image):
 
 def get_contours(image):
 
-    grayscale_image = grayscale(image)
-    blurred_image = gaussian_blur(grayscale_image, 3)
+    grayscale_image = get_grayscale(image)
+    blurred_image = gaussian_blur(grayscale_image, 5)
     contours_image = get_image_contours(blurred_image)
 
     return contours_image
@@ -418,20 +422,23 @@ def detect_images_lines(directory, logger):
 
 def detect_movies_lines():
 
-    # paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4", "challenge.mp4"]
-    paths = ["challenge.mp4"]
+    paths = ["solidWhiteRight.mp4", "solidYellowLeft.mp4", "challenge.mp4"]
     # paths = ["solidWhiteRight.mp4"]
+    # paths = ["solidYellowLeft.mp4"]
+    # paths = ["challenge.mp4"]
 
     for path in paths:
 
         clip = moviepy.editor.VideoFileClip(path)
 
-        simplified_contours_clip = clip.fl_image(get_simplified_contours_movie)
-        simple_lines_clip = simplified_contours_clip.fl_image(get_simplified_lines_movie)
-        road_lanes_candidates_clip = simplified_contours_clip.fl_image(get_road_lane_lines_candidates_movie)
+        masked_image_clip = clip.fl_image(get_masked_image_movie)
+        all_lines_clip = clip.fl_image(get_lines_movie)
+
+        road_lanes_candidates_clip = clip.fl_image(get_road_lane_lines_candidates_movie)
         road_lanes_clip = clip.fl_image(get_road_lanes_movie)
 
-        final_clip = moviepy.editor.clips_array([[clip, simple_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
+        final_clip = moviepy.editor.clips_array(
+            [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
         output_name = path.split(".")[0] + "_output.mp4"
         final_clip.write_videofile(output_name, audio=False, fps=12)
@@ -443,105 +450,121 @@ def get_single_channel_movie(image):
     return np.dstack([graycale_image, graycale_image, graycale_image])
 
 
-def get_simplified_contours_movie(image):
+def get_contours_image_movie(image):
 
-    grayscale_image = get_grayscale(image)
+    contours_image = get_contours(image)
+    return np.dstack([contours_image, contours_image, contours_image])
 
-    blurred_image = gaussian_blur(grayscale_image, 7)
-    contours_image = get_image_contours(blurred_image)
+
+def get_simple_contours_image_movie(image):
+
+    contours_image = get_contours(image)
+    simple_contours_image = get_simple_contours_image(contours_image)
+
+    return np.dstack([simple_contours_image, simple_contours_image, simple_contours_image])
+
+
+def get_masked_image_movie(image):
+
+    contours_image = get_contours(image)
+    simple_contours_image = get_simple_contours_image(contours_image)
 
     mask_vertices = np.array([[
         (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
     ]])
 
-    masked_image = region_of_interest(contours_image, mask_vertices)
-
-    simple_contours_image = get_simple_contours_image(masked_image)
-    return np.dstack([simple_contours_image, simple_contours_image, simple_contours_image])
+    masked_image = region_of_interest(simple_contours_image, mask_vertices)
+    return np.dstack([masked_image, masked_image, masked_image])
 
 
-def get_simplified_lines_movie(simple_image):
+def get_lines_movie(image):
+
+    contours_image = get_contours(image)
+    simple_contours_image = get_simple_contours_image(contours_image)
+
+    mask_vertices = np.array([[
+        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
+    ]])
+
+    masked_image = region_of_interest(simple_contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
-        simple_image[:, :, 0], rho=4, theta=math.pi / 180, threshold=50, lines=np.array([]),
+        masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
         minLineLength=10, maxLineGap=10)
 
-    line_img = np.zeros((simple_image.shape[0], simple_image.shape[1], 3), dtype=np.uint8)
+    line_img = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
 
     if lines is not None:
 
-        draw_lines(line_img, lines, color=[255, 255, 255])
+        draw_lines(line_img, lines, color=[255, 255, 255], thickness=1)
 
     return line_img
 
 
-def get_road_lane_lines_candidates_movie(simple_image):
+def get_road_lane_lines_candidates_movie(image):
+
+    contours_image = get_contours(image)
+    simple_contours_image = get_simple_contours_image(contours_image)
+
+    mask_vertices = np.array([[
+        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
+    ]])
+
+    masked_image = region_of_interest(simple_contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
-        simple_image[:, :, 0], rho=4, theta=math.pi / 180, threshold=80, lines=np.array([]),
+        masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
         minLineLength=10, maxLineGap=10)
 
     # Hough lines are wrapped in unnecessary list, extract them for easier processing
     lines = [line[0] for line in lines]
 
-    line_img = np.zeros((simple_image.shape[0], simple_image.shape[1], 3), dtype=np.uint8)
+    left_lines_candidates = get_left_road_lane_candidates(lines, image.shape)
+    right_lines_candidates = get_right_road_lane_candidates(lines, image.shape)
 
-    lane_lines = get_left_road_lane_candidates(lines, line_img.shape) + \
-                 get_right_road_lane_candidates(lines, line_img.shape)
+    lane_candidates = left_lines_candidates + right_lines_candidates
+    lane_candidates = [[line] for line in lane_candidates]
 
-    # Wrap up lines to format expected by draw_lines
-    lane_lines = [[line] for line in lane_lines]
+    lanes_image = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
+    draw_lines(lanes_image, lane_candidates, color=[0, 0, 255])
 
-    draw_lines(line_img, lane_lines, color=[255, 255, 255])
-
-    return line_img
+    return lanes_image
 
 
 def get_road_lanes_movie(image):
 
-    try:
+    contours_image = get_contours(image)
+    simple_contours_image = get_simple_contours_image(contours_image)
 
-        grayscale_image = get_grayscale(image)
+    mask_vertices = np.array([[
+        (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
+    ]])
 
-        blurred_image = gaussian_blur(grayscale_image, 7)
-        contours_image = get_image_contours(blurred_image)
+    masked_image = region_of_interest(simple_contours_image, mask_vertices)
 
-        mask_vertices = np.array([[
-            (400, 300), (50, image.shape[0]), (image.shape[1] - 50, image.shape[0]), (image.shape[1] - 400, 300)
-        ]])
+    lines = cv2.HoughLinesP(
+        masked_image, rho=4, theta=4 * math.pi / 180, threshold=100, lines=np.array([]),
+        minLineLength=10, maxLineGap=10)
 
-        masked_image = region_of_interest(contours_image, mask_vertices)
+    # Hough lines are wrapped in unnecessary list, extract them for easier processing
+    lines = [line[0] for line in lines]
 
-        simple_contours_image = get_simple_contours_image(masked_image)
+    left_lines_candidates = get_left_road_lane_candidates(lines, image.shape)
+    right_lines_candidates = get_right_road_lane_candidates(lines, image.shape)
 
-        lines = cv2.HoughLinesP(
-            simple_contours_image, rho=4, theta=math.pi / 180, threshold=80, lines=np.array([]),
-            minLineLength=10, maxLineGap=10)
+    left_lane_line = get_lane_line_dev(left_lines_candidates, image.shape)
+    right_lane_line = get_lane_line_dev(right_lines_candidates, image.shape)
 
-        # Hough lines are wrapped in unnecessary list, extract them for easier processing
-        lines = [line[0] for line in lines]
+    lane_lines = [left_lane_line, right_lane_line]
 
-        left_lines_candidates = get_left_road_lane_candidates(lines, image.shape)
-        right_lines_candidates = get_right_road_lane_candidates(lines, image.shape)
+    # Wrap up lines to format expected by draw_lines
+    lane_lines = [[line] for line in lane_lines]
 
-        left_lane_line = get_lane_line_dev(left_lines_candidates, image.shape)
-        right_lane_line = get_lane_line_dev(right_lines_candidates, image.shape)
+    lanes_image = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
+    draw_lines(lanes_image, lane_lines, thickness=20, color=[255, 0, 0])
+    lanes_overlay_image = weighted_img(lanes_image, image)
 
-        lane_lines = [left_lane_line, right_lane_line]
-
-        # Wrap up lines to format expected by draw_lines
-        lane_lines = [[line] for line in lane_lines]
-
-        lanes_image = np.zeros_like(image)
-        draw_lines(lanes_image, lane_lines, thickness=12, color=[255, 0, 0])
-
-        lanes_overlay_image = weighted_img(lanes_image, image, alpha=1)
-        return lanes_overlay_image
-
-    except:
-
-        # Probably failed to detect any lines
-        return image
+    return lanes_overlay_image
 
 
 def main():
