@@ -148,6 +148,22 @@ def weighted_img(img, initial_img, alpha=0.8, beta=1., lambda_parameter=0.):
     return cv2.addWeighted(initial_img, alpha, img, beta, lambda_parameter)
 
 
+def draw_lane(image, left_line, right_line):
+
+    vertices = np.array(
+        [
+            [
+                (left_line[0], left_line[1]),
+                (left_line[2], left_line[3]),
+                (right_line[2], right_line[3]),
+                (right_line[0], right_line[1])
+            ]
+        ])
+
+
+    cv2.fillPoly(image, vertices, color=[0, 255, 0])
+
+
 def get_line_coordinates(lines):
     """
     Given a list of lines, returns a tuple (xs, ys), where xs are x coordinates and ys are y coordinates
@@ -448,6 +464,7 @@ def pipeline(image):
 
     lanes_image = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
     draw_lines(lanes_image, lane_lines, thickness=10, color=[255, 0, 0])
+    draw_lane(lanes_image, left_lane_line, right_lane_line)
     lanes_overlay_image = weighted_img(lanes_image, image)
 
     return lanes_overlay_image
@@ -649,6 +666,7 @@ def process_image_challenge(image):
 
         lanes_image = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
         draw_lines(lanes_image, lane_lines, thickness=10, color=[255, 0, 0])
+        draw_lane(lanes_image, left_lane_line, right_lane_line)
         lanes_overlay_image = weighted_img(lanes_image, image)
 
         return lanes_overlay_image
@@ -681,7 +699,7 @@ def detect_movies_lines_simple():
             [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
         output_name = path.split(".")[0] + "_output.mp4"
-        final_clip.write_videofile(output_name, audio=False, fps=12)
+        final_clip.write_videofile(output_name, audio=False)
 
 
 def detect_movies_lines_challenge():
