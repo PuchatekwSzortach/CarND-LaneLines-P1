@@ -37,7 +37,7 @@ def get_logger(path):
 
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
-    logger = logging.getLogger("faces")
+    logger = logging.getLogger("lanes")
     file_handler = logging.FileHandler(path, mode="w")
 
     logger.setLevel(logging.INFO)
@@ -353,7 +353,7 @@ def get_filtered_lines(lines):
 
 def pipeline(image):
 
-    contours_image = get_contours(image)
+    contours_image = get_xyz_space_contours(image)
 
     mask_vertices = get_simple_mask_vertices(image.shape)
     masked_image = region_of_interest(contours_image, mask_vertices)
@@ -569,8 +569,8 @@ def main():
     images_directory = "./test_images"
     # detect_images_lines(images_directory, logger)
     #
-    # detect_movies_lines_simple()
-    detect_movies_lines_challenge()
+    detect_movies_lines_simple()
+    # detect_movies_lines_challenge()
 
 
 if __name__ == "__main__":
