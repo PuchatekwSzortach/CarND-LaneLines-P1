@@ -195,22 +195,16 @@ def get_lane_line_challenge(lines, image_shape):
 
     lane = get_most_probable_lane(lines)
 
-    return lane
+    lane_equation = np.polyfit([lane[0], lane[2]], [lane[1], lane[3]], deg=1)
 
-    # # Sometimes we fail to get anything, return empty lane then
-    # if np.all(lane == [0, 0, 0, 0]):
-    #     return lane
-    #
-    # lane_equation = np.polyfit([lane[0], lane[2]], [lane[1], lane[3]], deg=1)
-    #
-    # min_y = 450
-    # min_x = (min_y - lane_equation[1]) / lane_equation[0]
-    #
-    # max_y = image_shape[0]
-    # max_x = (max_y - lane_equation[1]) / lane_equation[0]
-    #
-    # lane = [int(coordinate) for coordinate in [min_x, min_y, max_x, max_y]]
-    # return lane
+    min_y = 450
+    min_x = (min_y - lane_equation[1]) / lane_equation[0]
+
+    max_y = image_shape[0]
+    max_x = (max_y - lane_equation[1]) / lane_equation[0]
+
+    lane = [int(coordinate) for coordinate in [min_x, min_y, max_x, max_y]]
+    return lane
 
 
 def get_line_length(line):
@@ -221,7 +215,7 @@ def get_line_length(line):
 
 def are_lines_collinear(first, second):
     """
-    Given two lines check if they are approximately colinear
+    Given two lines check if they are approximately collinear
     :param first: line
     :param second: line
     :return: boolean
@@ -619,8 +613,7 @@ def get_road_lane_lines_candidates_image_challenge(image):
 
     except:
 
-        print("Something failed")
-
+        # Occasionally we fail to find a lane, return input image then
         return image
 
 
@@ -662,8 +655,7 @@ def process_image_challenge(image):
 
     except:
 
-        print("Something failed")
-
+        # Occasionally we fail to detect lines, return input image then
         return image
 
 
@@ -710,7 +702,7 @@ def detect_movies_lines_challenge():
         [[clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
     output_name = path.split(".")[0] + "_output.mp4"
-    final_clip.write_videofile(output_name, audio=False, fps=12)
+    final_clip.write_videofile(output_name, audio=False)
 
 
 def main():
