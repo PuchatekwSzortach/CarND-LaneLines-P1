@@ -28,6 +28,13 @@ def get_challenge_mask_vertices(image_shape):
     ]])
 
 
+def get_my_car_mask_vertices(image_shape):
+
+    return np.array([[
+        (20, image_shape[0] - 50), (image_shape[1] - 20, image_shape[0] - 50), (image_shape[1] - 200, 230), (200, 230)
+    ]])
+
+
 def get_logger(path):
     """
     Returns a logger that writes to an html page
@@ -214,6 +221,22 @@ def get_lane_line_challenge(lines, image_shape):
     lane_equation = np.polyfit([lane[0], lane[2]], [lane[1], lane[3]], deg=1)
 
     min_y = 450
+    min_x = (min_y - lane_equation[1]) / lane_equation[0]
+
+    max_y = image_shape[0]
+    max_x = (max_y - lane_equation[1]) / lane_equation[0]
+
+    lane = [int(coordinate) for coordinate in [min_x, min_y, max_x, max_y]]
+    return lane
+
+
+def get_lane_line_my_car(lines, image_shape):
+
+    lane = get_most_probable_lane(lines)
+
+    lane_equation = np.polyfit([lane[0], lane[2]], [lane[1], lane[3]], deg=1)
+
+    min_y = 260
     min_x = (min_y - lane_equation[1]) / lane_equation[0]
 
     max_y = image_shape[0]
@@ -532,6 +555,14 @@ def get_masked_image_challenge(image):
     return region_of_interest(contours_image, mask_vertices)
 
 
+def get_masked_image_my_car(image):
+
+    contours_image = get_xyz_space_contours(image)
+    mask_vertices = get_my_car_mask_vertices(image.shape)
+
+    return region_of_interest(contours_image, mask_vertices)
+
+
 def get_lines_image(image):
 
     contours_image = get_contours(image)
@@ -557,6 +588,26 @@ def get_lines_image_challenge(image):
     contours_image = get_xyz_space_contours(image)
 
     mask_vertices = get_challenge_mask_vertices(image.shape)
+    masked_image = region_of_interest(contours_image, mask_vertices)
+
+    lines = cv2.HoughLinesP(
+        masked_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
+        minLineLength=5, maxLineGap=20)
+
+    line_img = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
+
+    if lines is not None:
+
+        draw_lines(line_img, lines, color=[255, 255, 255], thickness=1)
+
+    return line_img
+
+
+def get_lines_image_my_car(image):
+
+    contours_image = get_xyz_space_contours(image)
+
+    mask_vertices = get_my_car_mask_vertices(image.shape)
     masked_image = region_of_interest(contours_image, mask_vertices)
 
     lines = cv2.HoughLinesP(
@@ -634,6 +685,42 @@ def get_road_lane_lines_candidates_image_challenge(image):
         return image
 
 
+def get_road_lane_lines_candidates_image_my_car(image):
+
+    try:
+
+        contours_image = get_xyz_space_contours(image)
+
+        mask_vertices = get_my_car_mask_vertices(image.shape)
+        masked_image = region_of_interest(contours_image, mask_vertices)
+
+        lines = cv2.HoughLinesP(
+            masked_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
+            minLineLength=5, maxLineGap=20)
+
+        # Hough lines are wrapped in unnecessary list, extract them for easier processing
+        lines = [line[0] for line in lines]
+
+        left_lines_candidates = get_left_road_lane_candidates_challenge(lines, image.shape)
+        right_lines_candidates = get_right_road_lane_candidates_challenge(lines, image.shape)
+
+        filtered_left_lines_candidates = get_filtered_lines(left_lines_candidates)
+        filtered_right_lines_candidates = get_filtered_lines(right_lines_candidates)
+
+        lane_candidates = filtered_left_lines_candidates + filtered_right_lines_candidates
+        lane_candidates = [[line] for line in lane_candidates]
+
+        lanes_image = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
+        draw_lines(lanes_image, lane_candidates, color=[0, 0, 255])
+
+        return lanes_image
+
+    except:
+
+        # Occasionally we fail to find a lane, return input image then
+        return image
+
+
 def process_image_challenge(image):
 
     try:
@@ -658,6 +745,49 @@ def process_image_challenge(image):
 
         left_lane_line = get_lane_line_challenge(filtered_left_lines_candidates, image.shape)
         right_lane_line = get_lane_line_challenge(filtered_right_lines_candidates, image.shape)
+
+        lane_lines = [left_lane_line, right_lane_line]
+
+        # Wrap up lines to format expected by draw_lines
+        lane_lines = [[line] for line in lane_lines]
+
+        lanes_image = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.uint8)
+        draw_lines(lanes_image, lane_lines, thickness=10, color=[255, 0, 0])
+        draw_lane(lanes_image, left_lane_line, right_lane_line)
+        lanes_overlay_image = weighted_img(lanes_image, image)
+
+        return lanes_overlay_image
+
+    except:
+
+        # Occasionally we fail to detect lines, return input image then
+        return image
+
+
+def process_image_my_car(image):
+
+    try:
+
+        contours_image = get_xyz_space_contours(image)
+
+        mask_vertices = get_my_car_mask_vertices(image.shape)
+        masked_image = region_of_interest(contours_image, mask_vertices)
+
+        lines = cv2.HoughLinesP(
+            masked_image, rho=4, theta=math.pi / 180, threshold=100, lines=np.array([]),
+            minLineLength=5, maxLineGap=20)
+
+        # Hough lines are wrapped in unnecessary list, extract them for easier processing
+        lines = [line[0] for line in lines]
+
+        left_lines_candidates = get_left_road_lane_candidates_challenge(lines, image.shape)
+        right_lines_candidates = get_right_road_lane_candidates_challenge(lines, image.shape)
+
+        filtered_left_lines_candidates = get_filtered_lines(left_lines_candidates)
+        filtered_right_lines_candidates = get_filtered_lines(right_lines_candidates)
+
+        left_lane_line = get_lane_line_my_car(filtered_left_lines_candidates, image.shape)
+        right_lane_line = get_lane_line_my_car(filtered_right_lines_candidates, image.shape)
 
         lane_lines = [left_lane_line, right_lane_line]
 
@@ -717,20 +847,45 @@ def detect_movies_lines_challenge():
     road_lanes_clip = clip.fl_image(process_image_challenge)
 
     final_clip = moviepy.editor.clips_array(
-        [[clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
+        [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
     output_name = path.split(".")[0] + "_output.mp4"
     final_clip.write_videofile(output_name, audio=False)
 
 
+def detect_movies_lines_my_car():
+
+    directory = "/Users/k.jakub/Downloads/movies/"
+    filename = "23410012.mp4"
+    path = os.path.join(directory, filename)
+
+    clip = moviepy.editor.VideoFileClip(path)
+
+    masked_image_stacker = get_image_stack(get_masked_image_my_car)
+    masked_image_clip = clip.fl_image(masked_image_stacker)
+
+    all_lines_clip = clip.fl_image(get_lines_image_my_car)
+    road_lanes_candidates_clip = clip.fl_image(get_road_lane_lines_candidates_image_my_car)
+
+    road_lanes_clip = clip.fl_image(process_image_my_car)
+
+    final_clip = moviepy.editor.clips_array(
+        [[masked_image_clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
+
+    output_path = os.path.join(directory, filename.split(".")[0] + "_output.mp4")
+
+    final_clip.write_videofile(output_path, fps=12, audio=False)
+
+
 def main():
 
-    logger = get_logger("/tmp/lanes_detection.html")
-    images_directory = "./test_images"
+    # logger = get_logger("/tmp/lanes_detection.html")
+    # images_directory = "./test_images"
     # detect_images_lines(images_directory, logger)
     #
     # detect_movies_lines_simple()
-    detect_movies_lines_challenge()
+    # detect_movies_lines_challenge()
+    detect_movies_lines_my_car()
 
 
 if __name__ == "__main__":
