@@ -265,11 +265,6 @@ def get_lines_in_descending_length_order(lines):
 
 def get_most_probable_lane(lines):
 
-    if len(lines) == 0:
-
-        # If no lines are available, just return an empty line for simplicity
-        return [0, 0, 0, 0]
-
     sorted_lines = get_lines_in_descending_length_order(lines)
 
     lane_candidates = []
@@ -299,11 +294,6 @@ def get_most_probable_lane(lines):
 
 
 def get_most_probable_lanes_all(lines):
-
-    if len(lines) == 0:
-
-        # If no lines are available, just return an empty line for simplicity
-        return [0, 0, 0, 0]
 
     sorted_lines = get_lines_in_descending_length_order(lines)
 
@@ -653,18 +643,13 @@ def process_image_challenge(image):
         left_lines_candidates = get_left_road_lane_candidates_challenge(lines, image.shape)
         right_lines_candidates = get_right_road_lane_candidates_challenge(lines, image.shape)
 
-        # filtered_left_lines_candidates = get_filtered_lines(left_lines_candidates)
-        # filtered_right_lines_candidates = get_filtered_lines(right_lines_candidates)
+        filtered_left_lines_candidates = get_filtered_lines(left_lines_candidates)
+        filtered_right_lines_candidates = get_filtered_lines(right_lines_candidates)
 
-        # left_lane_line = get_lane_line_challenge(filtered_left_lines_candidates, image.shape)
-        # right_lane_line = get_lane_line_challenge(filtered_right_lines_candidates, image.shape)
-        #
-        # lane_lines = [left_lane_line, right_lane_line]
+        left_lane_line = get_lane_line_challenge(filtered_left_lines_candidates, image.shape)
+        right_lane_line = get_lane_line_challenge(filtered_right_lines_candidates, image.shape)
 
-        # left_lanes = get_most_probable_lanes_all(filtered_left_lines_candidates)
-        # right_lanes = get_most_probable_lanes_all(filtered_right_lines_candidates)
-
-        lane_lines = left_lines_candidates + right_lines_candidates
+        lane_lines = [left_lane_line, right_lane_line]
 
         # Wrap up lines to format expected by draw_lines
         lane_lines = [[line] for line in lane_lines]
@@ -722,7 +707,7 @@ def detect_movies_lines_challenge():
     road_lanes_clip = clip.fl_image(process_image_challenge)
 
     final_clip = moviepy.editor.clips_array(
-        [[clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_candidates_clip]])
+        [[clip, all_lines_clip], [road_lanes_candidates_clip, road_lanes_clip]])
 
     output_name = path.split(".")[0] + "_output.mp4"
     final_clip.write_videofile(output_name, audio=False, fps=12)
@@ -734,8 +719,8 @@ def main():
     images_directory = "./test_images"
     # detect_images_lines(images_directory, logger)
     #
-    detect_movies_lines_simple()
-    # detect_movies_lines_challenge()
+    # detect_movies_lines_simple()
+    detect_movies_lines_challenge()
 
 
 if __name__ == "__main__":
